@@ -14,10 +14,6 @@
 #include <scea/common/cmd_handler.h>
 #include <scea/common/guest_mem.h>
 
-#if ENABLE_RATE_LIMIT
-int64_t kvm_vgpu_sched_update(int vm_id, int op, long time);
-#endif
-
 typedef struct mem_region {
     uintptr_t base;
     uintptr_t offset;
@@ -137,7 +133,7 @@ struct pkt_wrapper *kvm_ava_poll_send_queue(struct vsock_info *vsock_info);
 int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt);
 void kvm_ava_host_pkt(struct virtio_vsock_pkt *pkt);
 
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#if AVA_ENABLE_KVM_MEDIATION
 void netlink_send_msg(struct app_info *app_info, struct obj_info *obj_info, int direction);
 void netlink_recv_msg(struct sk_buff *skb);
 #endif

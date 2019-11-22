@@ -3401,6 +3401,7 @@ static long kvm_vgpu_ioctl(struct file *filp,
 
 	switch (ioctl)
     {
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
     case KVM_ATTACH_BPF:
         /* copy all program fds */
         copy_from_user(bpf_policy_fds, (void *)arg, sizeof(int) * BPF_FUNC_TYPE_MAX);
@@ -3496,6 +3497,7 @@ static long kvm_vgpu_ioctl(struct file *filp,
         remove_kern_policy(&vgpu_dev->policies, (int)arg);
         r = 0;
         break;
+#endif
 
     case KVM_GET_VM_ID:
         if (vm_info->vm_id <= 0)
@@ -3507,7 +3509,7 @@ static long kvm_vgpu_ioctl(struct file *filp,
     case KVM_SET_VM_GUEST_CID:
         pr_info("kvm-vgpu: vm#%d is assigned guest_cid=%d\n", vm_info->vm_id, (int)arg);
         vm_info->guest_cid = arg;
-        #if ENABLE_KVM_MEDIATION
+        #if AVA_ENABLE_KVM_MEDIATION
         vgpu_dev->vsock_info[arg].vm_id = vm_info->vm_id;
         vgpu_dev->vsock_info[arg].vm_info = vm_info;
         vm_info->vsock_info = &vgpu_dev->vsock_info[arg];
@@ -4299,13 +4301,15 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 	kvm_arch_vcpu_put(vcpu);
 }
 
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#if AVA_ENABLE_KVM_MEDIATION
 struct netlink_kernel_cfg netlink_cfg = {
     .input = netlink_recv_msg,
 };
 #endif
 
 #ifdef AVA_VSOCK_INTERPOSITION
+// Experimental: the new scheduler has a input buffer for each VM, which
+// follows the real-world scheduler's design.
 int default_sched(void *data)
 {
     struct vsock_info *vsocks = (struct vsock_info *)data;
@@ -4315,7 +4319,11 @@ int default_sched(void *data)
     DEBUG_PRINT("[kvm-vgpu] start scheduler thread\n");
     while (1) {
         for (i = 3; i < MAX_VM_NUM + 3; i++) {
-            item = kvm_ava_poll_send_queue(&vsocks[i]);
+            if (nop_schedule(data))
+                item = kvm_ava_poll_send_queue(&vsocks[i]);
+            else
+                item = NULL;
+
             if (item != NULL) {
                 DEBUG_PRINT("[kvm-vgpu] transport a pkt in scheduler thread\n");
                 vsocks[i].vhost_transport_helper(item->pkt);
@@ -4335,8 +4343,6 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 {
 	int r;
 	int cpu;
-    #if ENABLE_SWAP
-    #endif
 
 	r = kvm_arch_init(opaque);
 	if (r)
@@ -4419,7 +4425,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
             "default scheduler");
 #endif
 
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#if AVA_ENABLE_KVM_MEDIATION
     /* initialize netlink sock */
     vgpu_dev->nl_sk = netlink_kernel_create(&init_net, NETLINK_USERSOCK, &netlink_cfg);
     if (!vgpu_dev->nl_sk) {
@@ -4463,7 +4469,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 out_undebugfs:
 	unregister_syscore_ops(&kvm_syscore_ops);
     kfree((void *)vgpu_dev->shm.base);
-#if ENABLE_SWAP
+#if AVA_ENABLE_KVM_MEDIATION
 out_release_netlink:
     netlink_kernel_release(vgpu_dev->nl_sk);
 #endif
@@ -4511,12 +4517,12 @@ void kvm_exit(void)
 	kvm_vfio_ops_exit();
     misc_deregister(&kvm_vgpu_dev);
     kfree((void *)vgpu_dev->shm.base);
-    #if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#if AVA_ENABLE_KVM_MEDIATION
     netlink_kernel_release(vgpu_dev->nl_sk);
     release_vgpu_resource();
     remove_kern_policy(&vgpu_dev->policies, -1);
     detach_bpf_policy(&vgpu_dev->bpf_policies, -1);
-    #endif
+#endif
 #ifdef AVA_VSOCK_INTERPOSITION
     kthread_stop(vgpu_dev->sched);
 #endif

@@ -81,7 +81,7 @@ void release_vgpu_resource(void)
 /* to be called at VM boot time */
 void init_vm_resource(int vm_id)
 {
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
     struct resource_policy_list *pos, *n;
     struct bpf_policy_list *bpf_pos, *bpf_n;
     struct sk_buff *skb;
@@ -104,7 +104,7 @@ void init_vm_resource(int vm_id)
 
 void release_vm_resource(int vm_id)
 {
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
     struct resource_policy_list *pos, *n;
     struct bpf_policy_list *bpf_pos, *bpf_n;
     struct sk_buff *skb;

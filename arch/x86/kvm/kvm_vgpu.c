@@ -241,7 +241,7 @@ void kvm_ava_host_pkt(struct virtio_vsock_pkt *pkt)
 }
 EXPORT_SYMBOL_GPL(kvm_ava_host_pkt);
 
-#if ENABLE_SWAP | ENABLE_RATE_LIMIT
+#if AVA_ENABLE_KVM_MEDIATION
 /* Receive messages from worker */
 void netlink_recv_msg(struct sk_buff *skb)
 {
@@ -303,9 +303,6 @@ void netlink_recv_msg(struct sk_buff *skb)
             nl_info = (struct netlink_info *)kmalloc(sizeof(struct netlink_info), GFP_KERNEL);
             // FIXME: vm_id is set by guestlib not worker
             init_nl_info(nl_info, 0, *(int *)msg->reserved_area, worker_pid);
-
-            // REMOVE ME
-            // netlink_send_msg(nlh->nlmsg_pid);
             break;
 
         case CONSUME_RC_DEVICE_TIME:
@@ -329,6 +326,7 @@ void netlink_recv_msg(struct sk_buff *skb)
             consume_vm_command_rate(vm_id, *(int *)msg->reserved_area);
             break;
 
+#if EXPERIMENTAL_CODE
         case CONSUME_RC_QAT_THROUGHPUT:
             DEBUG_PRINT("kvm-vgpu: [vm#%d] consumed %ld qat throughput\n",
                         vm_id, *(long *)msg->reserved_area);
@@ -356,6 +354,7 @@ void netlink_recv_msg(struct sk_buff *skb)
                             app_info->worker_port, app_info->worker_pid);
             }
             break;
+#endif
 
         default:
             pr_err("vgpu-kvm: netlink receives wrong message\n");
@@ -381,23 +380,6 @@ void netlink_send_msg(struct app_info *app_info, struct obj_info *obj_info, int 
 
     msg->api_id = INTERNAL_API;
     msg->command_id = direction;
-    //msg->rt_type = obj_info->RuntimeType;
-    //mNode->barrier = 1;
-    //mNode->mem_free = 1;
-    //*(uint64_t *)msg->reserved_area = obj_info->OriginalObjectHandle; // TODO: update worker
-    // TODO: I think these should be tracked by worker
-    //mNode->Context = VictimObject->Context;
-    //mNode->MemoryFlag = VictimObject->MemoryFlag;
-    //mNode->CommandQueue = VictimObject->CommandQueue;
-    //mNode->cmd_id = VictimObject->AllocateCmdId;
-    //mNode->mem_alloc = 1;
-    //mNode->SwappedOutAddress = VictimObject->SwappedOutAddress;
-    //mNode->dstore_size = VictimObject->ObjectSize;
-    //mNode->param_size = sizeof(ParamBase);
-    //mNode->AllocatedMemorySize = VictimObject->ObjectSize;
-
-    //DEBUG_PRINT("request to swap out worker[port=%u] buffer size=%lx\n",
-    //            app_info->worker_port, obj_info->ObjectSize);
 
     ret = nlmsg_unicast(vgpu_dev->nl_sk, skb_out, app_info->worker_pid);
     if (ret < 0) {

@@ -23,10 +23,7 @@ kvm-$(CONFIG_KVM_VGPU) += kvm_vgpu.o kvm_vgpu_init.o kvm_vgpu_policy.o \
 				          kvm_vgpu_measure.o \
 				          ava_policy/command_rate.o \
 				          ava_policy/device_time.o \
-				          ava_policy/device_time_hp.o \
-				          ava_policy/device_memory.o \
-				          ava_policy/device_memory_limit.o \
-						  ava_policy/qat_throughput.o
+				          ava_policy/device_time_hp.o
 
 kvm-intel-y		+= vmx.o pmu_intel.o
 kvm-amd-y		+= svm.o pmu_amd.o
