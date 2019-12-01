@@ -3323,7 +3323,7 @@ static int kvm_vgpu_open(struct inode *inode, struct file *filp)
     }
     spin_unlock(&vgpu_dev_update);
 
-    /* init resources */
+    /* init resources for scheduling policies */
     if (kinfo->is_vm)
         init_vm_resource(kinfo->vm_id);
 
@@ -3482,8 +3482,9 @@ static long kvm_vgpu_ioctl(struct file *filp,
             res_policy->policy = (struct resource_policy *)policy_addr;
             res_policy->id = ++(vgpu_dev->max_policy_id);
             /* init vgpu resource */
-            if (res_policy->policy->kvm_init)
+            if (res_policy->policy->kvm_init) {
                 res_policy->policy->kvm_init();
+            }
             list_add(&res_policy->list, &vgpu_dev->policies.list);
 
             r = vgpu_dev->max_policy_id;
@@ -3509,7 +3510,7 @@ static long kvm_vgpu_ioctl(struct file *filp,
     case KVM_SET_VM_GUEST_CID:
         pr_info("kvm-vgpu: vm#%d is assigned guest_cid=%d\n", vm_info->vm_id, (int)arg);
         vm_info->guest_cid = arg;
-        #if AVA_ENABLE_KVM_MEDIATION
+        #ifdef AVA_ENABLE_KVM_MEDIATION
         vgpu_dev->vsock_info[arg].vm_id = vm_info->vm_id;
         vgpu_dev->vsock_info[arg].vm_info = vm_info;
         vm_info->vsock_info = &vgpu_dev->vsock_info[arg];
@@ -4301,7 +4302,7 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 	kvm_arch_vcpu_put(vcpu);
 }
 
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
 struct netlink_kernel_cfg netlink_cfg = {
     .input = netlink_recv_msg,
 };
@@ -4425,7 +4426,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
             "default scheduler");
 #endif
 
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
     /* initialize netlink sock */
     vgpu_dev->nl_sk = netlink_kernel_create(&init_net, NETLINK_USERSOCK, &netlink_cfg);
     if (!vgpu_dev->nl_sk) {
@@ -4469,7 +4470,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 out_undebugfs:
 	unregister_syscore_ops(&kvm_syscore_ops);
     kfree((void *)vgpu_dev->shm.base);
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
 out_release_netlink:
     netlink_kernel_release(vgpu_dev->nl_sk);
 #endif
@@ -4517,9 +4518,8 @@ void kvm_exit(void)
 	kvm_vfio_ops_exit();
     misc_deregister(&kvm_vgpu_dev);
     kfree((void *)vgpu_dev->shm.base);
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
     netlink_kernel_release(vgpu_dev->nl_sk);
-    release_vgpu_resource();
     remove_kern_policy(&vgpu_dev->policies, -1);
     detach_bpf_policy(&vgpu_dev->bpf_policies, -1);
 #endif

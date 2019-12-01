@@ -54,20 +54,19 @@ struct resource_policy_list {
 void remove_kern_policy(struct resource_policy_list *policies, int id);
 
 /* policies */
-void init_vgpu_resource(void);
-void release_vgpu_resource(void);
-
 void init_vm_resource(int vm_id);
 void release_vm_resource(int vm_id);
 void check_vm_resource(int vm_id, struct command_base *command, struct sk_buff *skb);
 void consume_vm_resource(struct sk_buff *skb);
 
 void consume_vm_command_rate(int vm_id, int consumed);
-void consume_vm_device_time(int vm_id, long consumed);
 void consume_vm_device_time_hp(int vm_id, long consumed);
+#if EXPERIMENTAL_CODE
+void consume_vm_device_time(int vm_id, long consumed);
 void consume_vm_device_memory(struct app_info *app_info, long consumed);
 void consume_vm_device_memory_limit(int vm_id, long consumed);
 void consume_vm_qat_throughput(int vm_id, long consumed);
+#endif
 
 void init_app_resource(struct app_info *app_info);
 void release_app_resource(struct app_info *app_info);

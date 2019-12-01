@@ -35,6 +35,11 @@ static void init_device_time(void)
     AVA_MEASURE(init_device_time_measure);
 }
 
+static void fini_device_time(void)
+{
+    AVA_MEASURE(fini_device_time_measure);
+}
+
 static void check_vm_device_time(int vm_id, struct command_base *command)
 {
     long tot_used_time, vm_used_time, delay;
@@ -82,7 +87,7 @@ static void init_app_device_time(struct app_info *app_info)
     }
 }
 
-static void release_app_device_time(struct app_info *app_info)
+static void fini_app_device_time(struct app_info *app_info)
 {
     int vm_id = app_info->vm_id;
 
@@ -122,13 +127,13 @@ void consume_vm_device_time_hp(int vm_id, long consumed)
 
 static struct resource_policy device_time_hp_func = {
     .kvm_init = init_device_time,
-    .kvm_release = NULL,
+    .kvm_release = fini_device_time,
 
     .vm_init = NULL,
     .vm_release = NULL,
     .vm_check = check_vm_device_time,
 
     .app_init = init_app_device_time,
-    .app_release = release_app_device_time,
+    .app_release = fini_app_device_time,
 };
 EXPORT_SYMBOL_GPL(device_time_hp_func);

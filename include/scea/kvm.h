@@ -133,7 +133,7 @@ struct pkt_wrapper *kvm_ava_poll_send_queue(struct vsock_info *vsock_info);
 int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt);
 void kvm_ava_host_pkt(struct virtio_vsock_pkt *pkt);
 
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
 void netlink_send_msg(struct app_info *app_info, struct obj_info *obj_info, int direction);
 void netlink_recv_msg(struct sk_buff *skb);
 #endif

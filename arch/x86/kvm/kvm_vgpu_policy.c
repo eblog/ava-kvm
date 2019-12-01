@@ -20,10 +20,16 @@ void remove_kern_policy(struct resource_policy_list *policies, int id)
     list_for_each_entry_safe(pos, n, &policies->list, list)
         if (id <= 0 || pos->id == id) {
             list_del(&pos->list);
-            kfree(pos);
+
+            if (pos->policy->kvm_release)
+                pos->policy->kvm_release();
 
             pr_info("kvm-vgpu: remove kern policy#%d\n", pos->id);
-            if (pos->id == id) break;
+            if (pos->id == id) {
+                kfree(pos);
+                break;
+            }
+            kfree(pos);
         }
 }
 
@@ -58,27 +64,12 @@ void detach_bpf_policy(struct bpf_policy_list *policy_list, int id)
         }
 }
 
-/* deprecated: to be called at KVM boot time */
-void init_vgpu_resource(void) __deprecated
-{
-    struct resource_policy_list *pos, *n;
-
-    list_for_each_entry_safe(pos, n, &vgpu_dev->policies.list, list) {
-        pos->policy->kvm_init();
-    }
-}
-
-void release_vgpu_resource(void)
-{
-    struct resource_policy_list *pos, *n;
-
-    list_for_each_entry_safe(pos, n, &vgpu_dev->policies.list, list) {
-        if (pos->policy->kvm_release)
-            pos->policy->kvm_release();
-    }
-}
-
-/* to be called at VM boot time */
+/**
+ * init_vm_resource - Initialize VM resources for policies
+ * @vm_id: VM's id
+ *
+ * This function is called at VM boot time.
+ */
 void init_vm_resource(int vm_id)
 {
 #ifdef AVA_VSOCK_INTERPOSITION_NOBUF
@@ -102,6 +93,12 @@ void init_vm_resource(int vm_id)
 #endif
 }
 
+/**
+ * release_vm_resource - Free VM resources for policies
+ * @vm_id: VM's id
+ *
+ * This function is called when VM is destroyed.
+ */
 void release_vm_resource(int vm_id)
 {
 #ifdef AVA_VSOCK_INTERPOSITION_NOBUF

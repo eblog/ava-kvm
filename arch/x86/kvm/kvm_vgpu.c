@@ -142,7 +142,7 @@ EXPORT_SYMBOL_GPL(kvm_ava_poll_send_queue);
  *  This interposition interprets the command packet sent by guestlib
  *  to worker, and determines the spawn and shutdown of the guestlib.
  *
- *  @param pkt the packet sent from worker
+ *  @param pkt the packet sent from guestlib
  *  @return 0 if the packet is for a command, 1 otherwise
  */
 int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt)
@@ -155,6 +155,12 @@ int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt)
     struct vsock_info *vsock_info = &vgpu_dev->vsock_info[guest_cid];
     struct vm_info *vm_info = vsock_info->vm_info;
     struct app_info *new_app_info, *pos, *n;
+
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
+    struct command_base *msg = (struct command_base *)pkt->buf;
+    struct sk_buff *skb;
+    struct bpf_policy_data *bpf_data;
+#endif
 
     DEBUG_PRINT("[kvm_vgpu] interpose pkt (op=%u) from guest (cid#%llu) to worker (port=%u,len=%x)\n",
                 op, guest_cid, dst_port, pkt->len);
@@ -172,7 +178,9 @@ int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt)
             new_app_info = (struct app_info *)kmalloc(sizeof(struct app_info), GFP_KERNEL);
             init_app_info(new_app_info, guest_cid, src_port, dst_port, vm_info);
 
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
             init_app_resource(new_app_info);
+#endif
         }
         else if (op == VIRTIO_VSOCK_OP_SHUTDOWN) {
             DEBUG_PRINT("[kvm_vgpu] GUEST_OP_SHUTDOWN flags=%u\n", flags);
@@ -183,7 +191,9 @@ int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt)
                     DEBUG_PRINT("[kvm_vgpu] delete app_info cid=%llu port=%u worker_port=%u\n",
                                 guest_cid, src_port, dst_port);
 
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
                     release_app_resource(pos);
+#endif
                     destroy_app_info(pos);
                     break;
                 }
@@ -191,6 +201,19 @@ int kvm_ava_guest_pkt(struct virtio_vsock_pkt *pkt)
 
         return 1;
     }
+
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
+    if (pkt->len >= sizeof(struct command_base)) {
+        DEBUG_PRINT("[kvm_vgpu] receive invocation vm_id=%d, cmd_id=%ld\n", msg->vm_id, msg->command_id);
+        msg->flags = 0;
+        skb = alloc_skb(0, GFP_KERNEL);
+        bpf_data = (struct bpf_policy_data *)skb->cb;
+        bpf_data->vm_id = msg->vm_id;
+        bpf_data->cmd_id = msg->command_id;
+        check_vm_resource(vsock_info->vm_id, msg, skb);
+        kfree_skb(skb);
+    }
+#endif
 
     return 0;
 }
@@ -235,13 +258,15 @@ void kvm_ava_host_pkt(struct virtio_vsock_pkt *pkt)
         DEBUG_PRINT("[kvm_vgpu] delete app_info (cid=%llu port=%u worker_port=%u)\n",
                     guest_cid, dst_port, src_port);
 
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
         release_app_resource(app_info);
+#endif
         destroy_app_info(app_info);
     }
 }
 EXPORT_SYMBOL_GPL(kvm_ava_host_pkt);
 
-#if AVA_ENABLE_KVM_MEDIATION
+#ifdef AVA_ENABLE_KVM_MEDIATION
 /* Receive messages from worker */
 void netlink_recv_msg(struct sk_buff *skb)
 {
@@ -309,10 +334,10 @@ void netlink_recv_msg(struct sk_buff *skb)
             /* update GPU time budget when invocation is handled */
             DEBUG_PRINT("kvm-vgpu: [vm#%d] took %ld usecs\n",
                         vm_id, *(long *)msg->reserved_area);
-            //consume_vm_device_time(vm_id, *(long *)msg->reserved_area);
             consume_vm_device_time_hp(vm_id, *(long *)msg->reserved_area);
 
-            // TODO: design unique interface and put this loop outside the switch.
+            // TODO: Design unique interface and put this loop outside the
+            // switch.
             list_for_each_entry_safe(pos, n, &vgpu_dev->bpf_policies.list, list) {
                 if (pos->policy->vm_consume)
                     BPF_PROG_RUN(pos->policy->vm_consume, skb);
@@ -338,7 +363,7 @@ void netlink_recv_msg(struct sk_buff *skb)
                         vm_id,
                         *(long *)msg->reserved_area >= 0 ? "":"de",
                         *(long *)msg->reserved_area >= 0 ? *(long *)msg->reserved_area : -*(long *)msg->reserved_area);
-            app_info = get_app_info_by_worker_pid (vm_info, worker_pid);
+            app_info = get_app_info_by_worker_pid(vm_info, worker_pid);
             consume_vm_device_memory(app_info, *(long *)msg->reserved_area);
             consume_vm_device_memory_limit(vm_id, *(long *)msg->reserved_area);
             break;

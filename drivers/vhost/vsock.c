@@ -119,7 +119,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		list_del_init(&pkt->list);
 		spin_unlock_bh(&vsock->send_pkt_list_lock);
 
-#ifdef AVA_VSOCK_INTERPOSITION
+#ifdef AVA_ENABLE_KVM_MEDIATION
         /* Interpose packets sent from host (workers) */
         kvm_ava_host_pkt(pkt);
 #endif
@@ -418,6 +418,9 @@ static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
                 delay_signal = true;
             }
 #else
+#ifdef AVA_VSOCK_INTERPOSITION_NOBUF
+            kvm_ava_guest_pkt(pkt);
+#endif
 			virtio_transport_recv_pkt(pkt);
 #endif
         }
@@ -539,7 +542,7 @@ static int vhost_vsock_stop(struct vhost_vsock *vsock)
 {
 	size_t i;
 	int ret;
-#ifdef AVA_VSOCK_INTERPOSITION
+#ifdef AVA_ENABLE_KVM_MEDIATION
     struct kvm_vgpu_dev *vgpu_dev = vgpu_dev_instance();
 #endif
 
@@ -559,6 +562,8 @@ static int vhost_vsock_stop(struct vhost_vsock *vsock)
 
 #ifdef AVA_VSOCK_INTERPOSITION
     kfree(vgpu_dev->vsock_info[vsock->guest_cid].sq.buf);
+#endif
+#ifdef AVA_ENABLE_KVM_MEDIATION
     vgpu_dev->vsock_info[vsock->guest_cid].vsock = NULL;
 #endif
 
@@ -679,7 +684,7 @@ static int vhost_vsock_dev_release(struct inode *inode, struct file *file)
 static int vhost_vsock_set_cid(struct vhost_vsock *vsock, u64 guest_cid)
 {
 	struct vhost_vsock *other;
-#ifdef AVA_VSOCK_INTERPOSITION
+#ifdef AVA_ENABLE_KVM_MEDIATION
     struct kvm_vgpu_dev *vgpu_dev = vgpu_dev_instance();
     struct vsock_info *vsock_info;
 #endif
@@ -702,10 +707,12 @@ static int vhost_vsock_set_cid(struct vhost_vsock *vsock, u64 guest_cid)
 	}
 	vsock->guest_cid = guest_cid;
 
-#ifdef AVA_VSOCK_INTERPOSITION
+#ifdef AVA_ENABLE_KVM_MEDIATION
     /* Each VM has an associated vsock info, indexed by CID */
     vgpu_dev->vsock_info[guest_cid].vsock = vsock;
+#endif
 
+#ifdef AVA_VSOCK_INTERPOSITION
     /* Assign vhost helper function */
     vgpu_dev->vsock_info[vsock->guest_cid].vhost_signal_helper = vhost_signal_wrapper;
     vgpu_dev->vsock_info[vsock->guest_cid].vhost_transport_helper = vhost_transport_pkt_wrapper;

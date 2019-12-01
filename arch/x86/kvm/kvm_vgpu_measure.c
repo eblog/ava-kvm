@@ -79,9 +79,18 @@ void init_device_time_measure(void)
     kt = ktime_set(0, DEVICE_TIME_MEASURE_PERIOD * NSEC_PER_MSEC);
     device_time_measure.timer.function = &device_time_measure_timer_callback;
     hrtimer_start(&device_time_measure.timer, kt, HRTIMER_MODE_ABS);
+
+    trace_printk("Initialize device time with HRTIMER\n");
 }
 
 void count_device_time_measure(int vm_id, long consumed)
 {
     atomic64_add(consumed, &device_time_measure.time[vm_id]);
+}
+
+void fini_device_time_measure(void)
+{
+    int r;
+    r = hrtimer_cancel(&device_time_measure.timer);
+    BUG_ON(r != 0 && r != 1);
 }
